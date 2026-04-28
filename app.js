@@ -1,8 +1,8 @@
-/* ─── NSW Vegetation Classifier — Frontend ─────────────────────────────── */
+/*NSW Vegetation Classifier — Frontend  */
 
 'use strict';
 
-/* ── SVTM class definitions ───────────────────────────────────────────────── */
+/* SVTM class definitions */
 const FORMATIONS = [
   { id:  1, name: 'Alpine Complex',                           color: '#b0d8e8' },
   { id:  2, name: 'Arid Shrublands (Acacia)',                 color: '#c97a3e' },
@@ -23,7 +23,7 @@ const FORMATIONS = [
   { id: 17, name: 'Not classified',                           color: '#4b5563' },
 ];
 
-/* ── State ────────────────────────────────────────────────────────────────── */
+/*  State  */
 const state = {
   step: 1,
   completed: new Set(),
@@ -34,7 +34,7 @@ const state = {
   processingStart: null,
 };
 
-/* ── Helpers ──────────────────────────────────────────────────────────────── */
+/*  Helpers  */
 function $(id) { return document.getElementById(id); }
 
 function formatBytes(b) {
@@ -64,7 +64,6 @@ function setValItem(id, state) { // state: 'ok' | 'error' | 'running'
   dot.className = 'val-dot ' + state;
 }
 
-/* ── Navigation ───────────────────────────────────────────────────────────── */
 function goToStep(n) {
   document.querySelectorAll('.step-panel').forEach(p => p.classList.add('hidden'));
   $(`panel-${n}`).classList.remove('hidden');
@@ -84,7 +83,6 @@ function enableStepBtn(n) {
   if (btn) btn.disabled = false;
 }
 
-/* ── Step 1: Aerial Image ─────────────────────────────────────────────────── */
 function initStep1() {
   const drop  = $('aerial-drop');
   const input = $('aerial-input');
@@ -262,7 +260,6 @@ function showAerialStats(w, h, gsd, crsLabel) {
   if (crsLabel) $('preview-crs').textContent = crsLabel;
 }
 
-/* ── Step 2: LiDAR Ordering ───────────────────────────────────────────────── */
 function initStep2() {
   $('step2-back').addEventListener('click', () => goToStep(1));
   $('step2-next').addEventListener('click', () => {
@@ -293,7 +290,6 @@ function copyCoords() {
   }).catch(() => {});
 }
 
-/* ── Step 3: LiDAR Upload ─────────────────────────────────────────────────── */
 function initStep3() {
   const drop  = $('lidar-drop');
   const input = $('lidar-input');
@@ -467,7 +463,6 @@ function rand2(x, y) {
   return n - Math.floor(n);
 }
 
-/* ── Step 4: Configuration ────────────────────────────────────────────────── */
 function initStep4() {
   $('step4-back').addEventListener('click', () => goToStep(3));
   $('step4-next').addEventListener('click', () => {
@@ -523,7 +518,6 @@ function startSoilFetch() {
   });
 }
 
-/* ── Step 5: Processing ───────────────────────────────────────────────────── */
 function initStep5() {
   $('step5-back').addEventListener('click', () => goToStep(4));
   $('restart-btn').addEventListener('click', () => {
@@ -656,7 +650,6 @@ function animateProgress(from, to, duration, label, eta) {
 }
 function easeOut(t) { return 1 - (1 - t) ** 3; }
 
-/* ── Results ──────────────────────────────────────────────────────────────── */
 let mapScale = 1, showOverlay = false;
 let resultsImageData = null;
 
@@ -774,7 +767,6 @@ function toggleMapOverlay() {
   }
 }
 
-/* ── Download helpers ─────────────────────────────────────────────────────── */
 function triggerDownload(blob, filename) {
   const url = URL.createObjectURL(blob);
   const a   = document.createElement('a');
@@ -795,7 +787,6 @@ function withBtnLoadingState(btn, label, task) {
   });
 }
 
-/* 1 ── Classification Raster: export the results canvas as a PNG (.tif) */
 function downloadClassificationRaster() {
   withBtnLoadingState($('dl-geotiff'), 'Exporting…', () => new Promise(resolve => {
     $('results-canvas').toBlob(blob => {
@@ -805,7 +796,6 @@ function downloadClassificationRaster() {
   }));
 }
 
-/* 2 ── Vector Polygons: generate a GeoJSON FeatureCollection */
 function downloadVectorPolygons() {
   withBtnLoadingState($('dl-shp'), 'Building…', () => {
     const b = state.aerial.bounds || { north: -33.68, south: -33.92, east: 151.28, west: 151.02 };
@@ -846,7 +836,6 @@ function downloadVectorPolygons() {
   });
 }
 
-/* 3 ── Confidence Map: render a grayscale ramp and export as PNG (.tif) */
 function downloadConfidenceMap() {
   withBtnLoadingState($('dl-conf'), 'Rendering…', () => new Promise(resolve => {
     const src = $('results-canvas');
@@ -872,7 +861,6 @@ function downloadConfidenceMap() {
   }));
 }
 
-/* 4 ── Summary Report: generate a self-contained HTML page */
 function downloadReport() {
   withBtnLoadingState($('dl-pdf'), 'Building…', () => {
     const area    = $('rstat-area').textContent;
@@ -961,7 +949,6 @@ function downloadReport() {
   });
 }
 
-/* ── Sidebar step navigation ──────────────────────────────────────────────── */
 function initStepper() {
   document.querySelectorAll('.step-btn').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -971,7 +958,6 @@ function initStepper() {
   });
 }
 
-/* ── Init ─────────────────────────────────────────────────────────────────── */
 document.addEventListener('DOMContentLoaded', () => {
   initStepper();
   initStep1();
