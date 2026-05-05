@@ -30,7 +30,6 @@ const state = {
   aerial: { file: null, bounds: null, width: 0, height: 0, crs: null },
   lidar:  { file: null, ready: false },
   settings: { resolution: '1.0', soilSource: 'auto' },
-  soilReady: false,
   processingStart: null,
 };
 
@@ -126,35 +125,16 @@ async function handleAerialFile(file) {
 
   // Validate format
   const ext = file.name.split('.').pop().toLowerCase();
-  const supported = ['tif','tiff','ecw','jp2','img'];
+  const supported = ['tif', 'tiff'];
   await sleep(300);
   if (!supported.includes(ext)) {
     setValItem('val-format', 'error');
-    setBadge($('aerial-badge'), 'error', 'Invalid format');
+    setBadge($('aerial-badge'), 'error', 'GeoTIFF required');
     return;
   }
   setValItem('val-format', 'ok');
 
-  // Try GeoTIFF parse
-  if (['tif','tiff'].includes(ext)) {
-    await parseGeoTIFF(file);
-  } else {
-    // Non-GeoTIFF: pass remaining checks with simulated valid state
-    await sleep(400);
-    setValItem('val-crs', 'ok');
-    await sleep(300);
-    setValItem('val-georef', 'ok');
-    await sleep(300);
-    setValItem('val-bands', 'ok');
-    $('preview-crs').textContent = ext.toUpperCase() + ' – metadata parsed';
-    setBadge($('aerial-badge'), 'success', 'Ready');
-    $('step1-next').disabled = false;
-
-    // Set simulated NSW bounds (Sydney region)
-    state.aerial.bounds = { north: -33.68, south: -33.92, east: 151.28, west: 151.02 };
-    state.aerial.width = 2048; state.aerial.height = 2048;
-    showAerialStats(2048, 2048, '0.6 m/px', ext.toUpperCase());
-  }
+  await parseGeoTIFF(file);
 }
 
 async function parseGeoTIFF(file) {
@@ -233,15 +213,32 @@ async function parseGeoTIFF(file) {
 async function renderAerialPreview(img) {
   try {
     const W = 512, H = 512;
-    const data = await img.readRasters({ interleave: true, width: W, height: H });
+    const bands = await img.readRasters({ width: W, height: H });
+    const n = W * H;
+
+    // Per-channel 2nd–98th percentile stretch for good contrast
+    function stretch(band) {
+      const sorted = Float32Array.from(band).sort();
+      const lo = sorted[Math.floor(n * 0.02)];
+      const hi = sorted[Math.floor(n * 0.98)];
+      const range = hi - lo || 1;
+      const out = new Uint8ClampedArray(n);
+      for (let i = 0; i < n; i++) out[i] = Math.round(((band[i] - lo) / range) * 255);
+      return out;
+    }
+
+    const r = stretch(bands[0]);
+    const g = stretch(bands[1] ?? bands[0]);
+    const b = stretch(bands[2] ?? bands[0]);
+
     const canvas = $('aerial-canvas');
     canvas.width = W; canvas.height = H;
     const ctx = canvas.getContext('2d');
     const imgData = ctx.createImageData(W, H);
-    for (let i = 0; i < W * H; i++) {
-      imgData.data[i * 4]     = Math.min(255, data[i * 3]     || 0);
-      imgData.data[i * 4 + 1] = Math.min(255, data[i * 3 + 1] || 0);
-      imgData.data[i * 4 + 2] = Math.min(255, data[i * 3 + 2] || 0);
+    for (let i = 0; i < n; i++) {
+      imgData.data[i * 4]     = r[i];
+      imgData.data[i * 4 + 1] = g[i];
+      imgData.data[i * 4 + 2] = b[i];
       imgData.data[i * 4 + 3] = 255;
     }
     ctx.putImageData(imgData, 0, 0);
@@ -267,7 +264,7 @@ function initStep2() {
     enableStepBtn(3);
     goToStep(3);
   });
-  $('copy-coords-btn').addEventListener('click', copyCoords);
+  $('download-shp-btn').addEventListener('click', downloadShapefile);
 }
 
 function populateBBox() {
@@ -278,16 +275,101 @@ function populateBBox() {
   $('coord-west').textContent  = b.west.toFixed(6)  + '°';
 }
 
-function copyCoords() {
-  const b = state.aerial.bounds || { north: 0, south: 0, east: 0, west: 0 };
-  const text = `North: ${b.north.toFixed(6)}\nSouth: ${b.south.toFixed(6)}\nEast:  ${b.east.toFixed(6)}\nWest:  ${b.west.toFixed(6)}`;
-  navigator.clipboard.writeText(text).then(() => {
-    const btn = $('copy-coords-btn');
-    const orig = btn.innerHTML;
-    btn.innerHTML = `<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><polyline points="3 8 6.5 11.5 13 5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg> Copied!`;
-    btn.style.color = 'var(--accent-green)';
-    setTimeout(() => { btn.innerHTML = orig; btn.style.color = ''; }, 2000);
-  }).catch(() => {});
+async function downloadShapefile() {
+  const btn = $('download-shp-btn');
+  const origHTML = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = `<svg width="14" height="14" viewBox="0 0 16 16" fill="none" style="animation:spin .7s linear infinite"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="2" stroke-dasharray="28" stroke-dashoffset="10"/></svg> Building…`;
+
+  try {
+    const b = state.aerial.bounds || { north: -33.68, south: -33.92, east: 151.28, west: 151.02 };
+    const { north, south, east, west } = b;
+
+    // Closed polygon ring (5 points)
+    const ring = [
+      [west, south], [east, south], [east, north], [west, north], [west, south]
+    ];
+    const numPts = ring.length; // 5
+
+    // Content = type(4) + bbox(32) + numParts(4) + numPoints(4) + parts(4) + pts(80) = 128 bytes = 64 words
+    const contentBytes = 4 + 32 + 4 + 4 + 4 + numPts * 16;
+    const contentWords = contentBytes / 2;
+    const shpFileWords = (100 + 8 + contentBytes) / 2;
+
+    // .shp
+    const shpBuf = new ArrayBuffer(100 + 8 + contentBytes);
+    const shp = new DataView(shpBuf);
+    shp.setInt32(0,  9994, false);
+    shp.setInt32(24, shpFileWords, false);
+    shp.setInt32(28, 1000, true);
+    shp.setInt32(32, 5,    true);
+    shp.setFloat64(36, west,  true);
+    shp.setFloat64(44, south, true);
+    shp.setFloat64(52, east,  true);
+    shp.setFloat64(60, north, true);
+    shp.setInt32(100, 1,            false);
+    shp.setInt32(104, contentWords, false);
+    let o = 108;
+    shp.setInt32(o, 5, true);    o += 4;
+    shp.setFloat64(o, west,  true); o += 8;
+    shp.setFloat64(o, south, true); o += 8;
+    shp.setFloat64(o, east,  true); o += 8;
+    shp.setFloat64(o, north, true); o += 8;
+    shp.setInt32(o, 1,       true); o += 4;
+    shp.setInt32(o, numPts,  true); o += 4;
+    shp.setInt32(o, 0,       true); o += 4;
+    for (const [x, y] of ring) {
+      shp.setFloat64(o, x, true); o += 8;
+      shp.setFloat64(o, y, true); o += 8;
+    }
+
+    // .shx
+    const shxBuf = new ArrayBuffer(108);
+    const shx = new DataView(shxBuf);
+    shx.setInt32(0,  9994,  false);
+    shx.setInt32(24, 54,    false);
+    shx.setInt32(28, 1000,  true);
+    shx.setInt32(32, 5,     true);
+    shx.setFloat64(36, west,  true);
+    shx.setFloat64(44, south, true);
+    shx.setFloat64(52, east,  true);
+    shx.setFloat64(60, north, true);
+    shx.setInt32(100, 50,           false);
+    shx.setInt32(104, contentWords, false);
+
+    // .dbf — dBASE III+, single numeric field "ID"
+    // Header: 32 bytes + 32 bytes (field) + 1 byte terminator = 65 bytes
+    // Record: 1 deletion flag + 10 field bytes = 11 bytes
+    const dbfBuf = new ArrayBuffer(76);
+    const dbf = new DataView(dbfBuf);
+    dbf.setUint8(0, 3);
+    dbf.setUint8(1, 26); dbf.setUint8(2, 4); dbf.setUint8(3, 28);
+    dbf.setUint32(4,  1,  true);
+    dbf.setUint16(8,  65, true);
+    dbf.setUint16(10, 11, true);
+    [73,68].forEach((c, i) => dbf.setUint8(32 + i, c)); // "ID"
+    dbf.setUint8(43, 0x4E); // 'N'
+    dbf.setUint8(48, 10);
+    dbf.setUint8(64, 0x0D);
+    dbf.setUint8(65, 0x20);
+    '         1'.split('').forEach((c, i) => dbf.setUint8(66 + i, c.charCodeAt(0)));
+
+    // .prj — WGS84
+    const prj = 'GEOGCS["GCS_WGS_1984",DATUM["D_WGS_1984",SPHEROID["WGS_1984",6378137.0,298.257223563]],PRIMEM["Greenwich",0.0],UNIT["Degree",0.0174532925199433]]';
+
+    // Zip using JSZip
+    const zip = new JSZip();
+    zip.file('study_area.shp', shpBuf);
+    zip.file('study_area.shx', shxBuf);
+    zip.file('study_area.dbf', dbfBuf);
+    zip.file('study_area.prj', prj);
+
+    const blob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE' });
+    triggerDownload(blob, 'study_area_shapefile.zip');
+  } finally {
+    btn.innerHTML = origHTML;
+    btn.disabled  = false;
+  }
 }
 
 function initStep3() {
@@ -312,7 +394,7 @@ function initStep3() {
     state.completed.add(3);
     enableStepBtn(4);
     goToStep(4);
-    startSoilFetch();
+
   });
 }
 
@@ -468,7 +550,7 @@ function initStep4() {
   $('step4-next').addEventListener('click', () => {
     const res = document.querySelector('input[name="resolution"]:checked');
     state.settings.resolution = res ? res.value : '1.0';
-    state.settings.soilSource = $('soil-source').value;
+
     state.completed.add(4);
     enableStepBtn(5);
     goToStep(5);
@@ -476,47 +558,6 @@ function initStep4() {
   });
 }
 
-function startSoilFetch() {
-  const spinner = $('soil-spinner');
-  const text    = $('soil-status-text');
-  const clSoil  = $('cl-soil');
-
-  const messages = [
-    [800,  'Querying SEED portal spatial API…'],
-    [1400, 'Downloading ASC soil classification tiles…'],
-    [1200, 'Reprojecting to EPSG:3857…'],
-    [800,  'Aligning soil raster to aerial extent…'],
-    [600,  'Soil data ready ✓'],
-  ];
-
-  let t = 0;
-  messages.forEach(([delay, msg], i) => {
-    t += delay;
-    setTimeout(() => {
-      text.textContent = msg;
-      if (i === messages.length - 1) {
-        spinner.style.display = 'none';
-        text.style.color = 'var(--accent-green)';
-        state.soilReady = true;
-        // Update checklist
-        clSoil.classList.remove('pending');
-        clSoil.classList.add('ready');
-        const spinnerEl = clSoil.querySelector('.mini-spinner');
-        if (spinnerEl) {
-          const tick = document.createElementNS('http://www.w3.org/2000/svg','svg');
-          tick.setAttribute('class','cl-tick');
-          tick.setAttribute('width','14'); tick.setAttribute('height','14');
-          tick.setAttribute('viewBox','0 0 16 16');
-          tick.setAttribute('fill','none');
-          tick.innerHTML = `<polyline points="3 8 6.5 11.5 13 5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>`;
-          spinnerEl.replaceWith(tick);
-        }
-        const dot = clSoil.querySelector('.cl-dot');
-        if (dot) dot.className = 'cl-dot cl-green';
-      }
-    }, t);
-  });
-}
 
 function initStep5() {
   $('step5-back').addEventListener('click', () => goToStep(4));
@@ -526,7 +567,6 @@ function initStep5() {
       aerial: { file: null, bounds: null, width: 0, height: 0, crs: null },
       lidar: { file: null, ready: false },
       settings: { resolution: '1.0', soilSource: 'auto' },
-      soilReady: false,
     });
     document.querySelectorAll('.step-btn').forEach((b,i) => {
       b.classList.remove('active','done');

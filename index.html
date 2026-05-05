@@ -116,7 +116,7 @@
         <div class="split-left">
 
           <div class="upload-zone" id="aerial-drop">
-            <input type="file" id="aerial-input" accept=".tif,.tiff,.ecw,.jp2,.img" hidden />
+            <input type="file" id="aerial-input" accept=".tif,.tiff" hidden />
             <div class="upload-icon-wrap">
               <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
                 <polyline points="16 16 12 12 8 16"/>
@@ -126,7 +126,7 @@
             </div>
             <p class="upload-primary">Drag &amp; drop your aerial image</p>
             <p class="upload-secondary">or <button class="link-btn" id="aerial-browse">browse files</button></p>
-            <p class="upload-formats">GeoTIFF &middot; ECW &middot; JP2 &middot; IMG</p>
+            <p class="upload-formats">GeoTIFF &middot; .tif / .tiff</p>
           </div>
 
           <div class="file-card hidden" id="aerial-card">
@@ -212,7 +212,7 @@
         <div class="step-header-text">
           <p class="step-eyebrow">Step 2 of 5</p>
           <h1 class="step-heading">LiDAR Data Ordering</h1>
-          <p class="step-subheading">The ELVIS portal does not expose a public API. Use the bounding box coordinates below to manually order the corresponding LiDAR tiles.</p>
+          <p class="step-subheading">Use the shapefile below to define your study area in the ELVIS portal, then order the matching LiDAR point cloud tiles.</p>
         </div>
         <div class="step-badge badge-amber">Manual Step</div>
       </div>
@@ -224,7 +224,7 @@
           <div class="bbox-card">
             <div class="bbox-card-header">
               <h3>Study Area Bounding Box</h3>
-              <p class="bbox-crs-note">GDA2020 &nbsp;·&nbsp; Decimal Degrees</p>
+              <p class="bbox-crs-note">WGS84 &nbsp;·&nbsp; Decimal Degrees</p>
             </div>
 
             <div class="bbox-compass-grid">
@@ -259,12 +259,13 @@
             </div>
 
             <div class="bbox-actions">
-              <button class="btn btn-secondary icon-btn" id="copy-coords-btn">
+              <button class="btn btn-secondary icon-btn" id="download-shp-btn">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <rect x="9" y="9" width="13" height="13" rx="2"/>
-                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                  <polyline points="7 10 12 15 17 10"/>
+                  <line x1="12" y1="15" x2="12" y2="3"/>
                 </svg>
-                Copy Coordinates
+                Download Shapefile
               </button>
               <a href="https://elevation.fsdf.org.au" target="_blank" rel="noopener" class="btn btn-outline icon-btn">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -288,21 +289,12 @@
               Ordering LiDAR from ELVIS
             </h3>
             <ol class="instructions-ol">
-              <li>Click <strong>Open ELVIS Portal</strong> to visit <code>elevation.fsdf.org.au</code>.</li>
-              <li>Click <strong>Order Data</strong> in the top navigation bar.</li>
-              <li>Paste your bounding box using the <strong>Copy Coordinates</strong> button above.</li>
-              <li>Select <strong>Point Cloud</strong> as product type, <strong>LAS / LAZ</strong> as format.</li>
-              <li>Add tiles to cart and complete your order. A download link will arrive by email.</li>
-              <li>When your <code>.zip</code> archive arrives, return here and proceed to Step 3.</li>
+              <li><span>Click <strong>Download Shapefile</strong> above to save your study area boundary as a WGS84 <code>.zip</code>.</span></li>
+              <li><span>Click <strong>Open ELVIS Portal</strong>, then click <strong>Order Data</strong> in the top navigation bar.</span></li>
+              <li><span>Click <strong>Load File</strong>, then upload the shapefile <code>.zip</code> you downloaded above — the portal will zoom to your area and load available data.</span></li>
+              <li><span>Click <strong>Search</strong>, then under <em>NSW Government – Spatial Services → Point Clouds</em>, click <strong>Select All</strong>. Note: LiDAR coverage varies — not all regions will have point cloud data available.</span></li>
+              <li><span>Fill out the <strong>Industry</strong> and <strong>Email</strong> fields and click <strong>Order</strong>. You will receive an email with a download link — download the <code>.zip</code> file and proceed to Step 3.</span></li>
             </ol>
-            <div class="info-banner">
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
-                <line x1="12" y1="9" x2="12" y2="13"/>
-                <line x1="12" y1="17" x2="12.01" y2="17"/>
-              </svg>
-              LiDAR orders may take 24–48 hours. You can close this page and return later — your uploaded aerial image will need to be re-uploaded.
-            </div>
           </div>
 
         </div>
@@ -439,7 +431,7 @@
         <div class="step-header-text">
           <p class="step-eyebrow">Step 4 of 5</p>
           <h1 class="step-heading">Classifier Configuration</h1>
-          <p class="step-subheading">Select output resolution and soil data source. Soil classification data is automatically fetched from the SEED portal.</p>
+          <p class="step-subheading">Select the output resolution for the classification map. Higher resolution produces more detail but takes longer to process.</p>
         </div>
       </div>
 
@@ -510,18 +502,6 @@
               </div>
             </div>
 
-            <!-- Soil source -->
-            <div class="settings-group">
-              <h3 class="settings-group-title">Soil Classification Source</h3>
-              <select id="soil-source" class="styled-select">
-                <option value="auto">Auto-fetch from SEED portal (recommended)</option>
-                <option value="manual">Upload custom soil raster</option>
-              </select>
-              <div class="soil-status" id="soil-status">
-                <div class="mini-spinner" id="soil-spinner"></div>
-                <span id="soil-status-text">Fetching ASC soil data from SEED…</span>
-              </div>
-            </div>
           </div>
 
           <!-- Input stack checklist -->
@@ -542,15 +522,6 @@
                   <svg class="cl-tick" width="14" height="14" viewBox="0 0 16 16" fill="none">
                     <polyline points="3 8 6.5 11.5 13 5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                   </svg>
-                </div>
-
-                <div class="cl-item pending" id="cl-soil">
-                  <div class="cl-dot cl-amber"></div>
-                  <div class="cl-info">
-                    <span class="cl-name">Soil Code (ASC)</span>
-                    <span class="cl-detail">Band 4 &middot; 17 soil orders, 0 = nodata</span>
-                  </div>
-                  <div class="mini-spinner"></div>
                 </div>
 
                 <div class="cl-item ready" id="cl-chm">
@@ -808,6 +779,7 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/geotiff@2/dist-browser/geotiff.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jszip@3/dist/jszip.min.js"></script>
 <script src="app.js"></script>
 </body>
 </html>
